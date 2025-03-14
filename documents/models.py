@@ -54,17 +54,62 @@ class Document(models.Model):
         extract text from the document based on file type
         """
         ext = os.path.splitext(self.file.name)[1].lower()
-        text = ""
+        extracted_pages = []
 
         if ext == ".pdf":
             reader = PdfReader(self.file)
-            for page in reader.pages:
-                text += page.extract_text() or ""
+            for page_num, page in enumerate(reader.pages, start=1):
+                page_text = page.extract_text() or ""
+                if page_text.strip():
+                    extracted_pages.append(
+                        {"text": page_text, "page": page_num}
+                    )
 
         elif ext == ".docx":
             doc = DocxDocument(self.file)
-            for para in doc.paragraphs:
-                text += para.text + "\n"
+            current_page = 1
+            char_count = 0
+            chars_per_page = 3000  # approximate character count per page
+            page_text = ""
 
-        return text.strip()
+            for para in doc.paragraphs:
+                if para.text.strip():
+                    page_text += para.text + "\n"
+                    char_count += len(para.text)
+
+                # check for manual page breaks
+                if para.text.strip() == "":
+                    if "page-break-before" in para._element.xml or "w:br w:type='page'" in para._element.xml:
+                        extracted_pages.append(
+                            {
+                                "text": page_text.strip(), 
+                                "page": current_page
+                            }
+                        )
+                        current_page += 1
+                        page_text = ""
+                        char_count = 0
+
+                # approximate page breaks based on character count
+                elif char_count >= chars_per_page:
+                    extracted_pages.append(
+                        {
+                            "text": page_text.strip(), 
+                            "page": current_page
+                        }
+                    )
+                    current_page += 1
+                    page_text = ""
+                    char_count = 0
+
+                # Add last collected page text
+                if page_text.strip():
+                    extracted_pages.append(
+                        {
+                            "text": page_text.strip(), 
+                            "page": current_page
+                        }
+                    )
+
+        return extracted_pages
     

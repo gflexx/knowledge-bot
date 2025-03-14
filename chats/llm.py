@@ -10,6 +10,8 @@ import os
 from django.apps import apps
 from dotenv import load_dotenv
 
+from documents.llm import get_retriever
+
 load_dotenv()
 
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
@@ -115,20 +117,20 @@ prompt = PromptTemplate(
 )
 
 
-def get_retriever():
-    """
-    get the retriever from the app's vector store.
-    """
-    chats_config = apps.get_app_config('chats')
-    if chats_config.vector_store is None:
-        raise Exception("Vector store not initialized.  Check chats/apps.py")
-    return chats_config.vector_store.as_retriever(
-        search_type="mmr",
-        search_kwargs={
-            "k": 3,
-            "filter": {"priority": True}
-        }
-    )
+# def get_retriever():
+#     """
+#     get the retriever from the app's vector store.
+#     """
+#     chats_config = apps.get_app_config('chats')
+#     if chats_config.vector_store is None:
+#         raise Exception("Vector store not initialized.  Check chats/apps.py")
+#     return chats_config.vector_store.as_retriever(
+#         search_type="mmr",
+#         search_kwargs={
+#             "k": 3,
+#             "filter": {"priority": True}
+#         }
+#     )
 
 
 def format_prompt(inputs):
@@ -174,16 +176,27 @@ async def stream_answer(inputs):
     print(question)
 
     formatted_context = "\n".join([doc.page_content for doc in context_docs])
+
+    print(formatted_context)
     references = []
+    seen_references = set()
 
     for i, doc in enumerate(context_docs):
-        references.append(f"[{i+1}] Source: {doc.metadata.get('source', 'Unknown')}")
+        source = doc.metadata.get('title', 'Unknown')
+        page = doc.metadata.get('page', 'N/A')
+        reference = f"Source: {source}, Page: {page}"
 
+        if reference not in seen_references:
+            seen_references.add(reference)
+            references.append(f"[{len(references) + 1}] {reference}")
+            
     references_text = "\n".join(references)
 
-    formatted_prompt = prompt.format(context=formatted_context, question=question)
-    
-    async for value in gemini_stream_call(formatted_prompt):
-        yield value
+    yield f"{references_text}"
 
-    yield f"\nReferences:\n{references_text}"
+    # formatted_prompt = prompt.format(context=formatted_context, question=question)
+    
+    # async for value in gemini_stream_call(formatted_prompt):
+    #     yield value
+
+    # yield f"\nReferences:\n{references_text}"

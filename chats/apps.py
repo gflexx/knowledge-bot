@@ -1,5 +1,5 @@
 from django.apps import AppConfig
-from .llm import get_vector_store
+from django.apps import apps
 
 class ChatsConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
@@ -8,6 +8,14 @@ class ChatsConfig(AppConfig):
 
     def ready(self):
         if not self.vector_store: 
-            # self.vector_store = get_vector_store()
-            # print("Vector store initialized...\n")
-            pass
+            documents_config = apps.get_app_config('documents')
+            # if documents_config.vector_store is None:
+            #     raise Exception("Vector store not initialized or Empty. Check documents/apps.py")
+
+            # return documents_config.vector_store.as_retriever(
+            #     search_type="mmr",
+            #     search_kwargs={
+            #         "k": 3,
+            #         "filter": {"priority": True}
+            #     }
+            # )

@@ -48,18 +48,20 @@ def create_knowledge_base():
     all_texts = []
 
     for doc in documents:
-        text = doc.extract_text()
-        if text:
+        extracted_pages = doc.extract_text() 
+
+        for page in extracted_pages:
             all_texts.append(
                 Document( 
-                    page_content=text,
+                    page_content=page["text"],
                     metadata={
+                        "document_id": str(doc.id),
                         "title": doc.title,
-                        "priority": doc.priority
+                        "priority": doc.priority,
+                        "page": page["page"] 
                     }
                 )
             )
-
 
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=1000, 
@@ -85,20 +87,24 @@ def add_document_to_vector_store(document):
 
     if documents_config.vector_store:
         text = document.extract_text()
-        if text:
+        extracted_pages = document.extract_text()
+        
+        for page in extracted_pages:
             text_splitter = RecursiveCharacterTextSplitter(
                 chunk_size=1000, 
                 chunk_overlap=250
             )
             split_docs = text_splitter.split_documents(
                 [
-                    {
-                        "page_content": text, 
-                        "metadata": {
+                    Document( 
+                        page_content=page["text"],
+                        metadata={
+                            "document_id": str(document.id),
                             "title": document.title,
-                            "priority": document.priority
+                            "priority": document.priority,
+                            "page": page["page"] 
                         }
-                    }
+                    )
                 ]
             )
 
@@ -130,14 +136,17 @@ def get_retriever():
     """
     documents_config = apps.get_app_config('documents')
     if documents_config.vector_store is None:
-        raise Exception("Vector store not initialized or Emppty. Check documents/apps.py")
+        raise Exception("Vector store not initialized or Empty. Check documents/apps.py")
     
-    return documents_config.vector_store.as_retriever(
+    vector_store = documents_config.vector_store
+    return vector_store.as_retriever(
         search_type="mmr",
         search_kwargs={
-            "k": 3,
-            "filter": {"priority": True}
-        }
+            "k": 5,
+            "lambda_mult": 0.5,
+            # "filter": {"priority": True}
+        },
+        
     )
 
 
@@ -163,9 +172,10 @@ async def stream_answer(inputs):
     retriever = get_retriever()
     context_docs = retriever.invoke(question)
 
-    print(question)
+    print(f"Question: {question}")
 
     formatted_context = "\n".join([doc.page_content for doc in context_docs])
+
     references = []
 
     for i, doc in enumerate(context_docs):
@@ -178,4 +188,5 @@ async def stream_answer(inputs):
     async for value in gemini_stream_call(formatted_prompt):
         yield value
 
-    yield f"\nReferences:\n{references_text}"
+    if references_text:
+        yield f"\nReferences:\n{references_text}"

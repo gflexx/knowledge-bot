@@ -10,4 +10,5 @@ class DocumentsConfig(AppConfig):
         if not self.vector_store:
             self.vector_store = get_vector_store()
             if self.vector_store:
-                print(f"{self.name} vector store initialized...")
+                print(f"Document length: {self.vector_store._collection.count()} ...")
+                print(f"Documents vector store initialized...")
