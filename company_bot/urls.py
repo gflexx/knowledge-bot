@@ -3,12 +3,10 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 
-
-
 API = 'api/v0'
 
 urlpatterns = [
-    path('/duisbxtya/admin/', admin.site.urls),
+    path('duisbxtya/admin/', admin.site.urls),
     path(f'{API}/chats/', include('chats.urls')),
 ]
 

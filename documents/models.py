@@ -31,7 +31,7 @@ class Document(models.Model):
     def __str__(self):
         return self.title
     
-    
+
     def save(self, *args, **kwargs):
         """
         on save, add to vector store or initialize it
@@ -42,7 +42,7 @@ class Document(models.Model):
         documents_config = apps.get_app_config('documents')
         if documents_config.vector_store is None:
             documents_config.vector_store = create_knowledge_base()
-            print("New vector store created from all documents...")
+            print("New vector store created from documents...")
 
         else:
             print(f"Adding {self.title} to vector store...")

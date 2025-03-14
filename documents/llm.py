@@ -1,6 +1,7 @@
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.prompts import PromptTemplate
+from langchain_core.documents import Document
 from langchain_chroma import Chroma
 import google.generativeai as genai
 
@@ -42,22 +43,23 @@ def create_knowledge_base():
     create a new vector store from all existing documents
     """
     print("Initializing vector store from existing documents...")
-    Document = apps.get_model('documents', 'Document')
-    documents = Document.objects.all()
+    DocumentModel = apps.get_model('documents', 'Document')
+    documents = DocumentModel.objects.all()
     all_texts = []
 
     for doc in documents:
         text = doc.extract_text()
         if text:
             all_texts.append(
-                {
-                    "page_content": text, 
-                    "metadata": {
+                Document( 
+                    page_content=text,
+                    metadata={
                         "title": doc.title,
                         "priority": doc.priority
                     }
-                }
+                )
             )
+
 
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=1000, 
@@ -107,9 +109,10 @@ def add_document_to_vector_store(document):
 
 # prompt template
 template = """
-    You are Glitex Solutions' AI assistant.
-    Answer the question using the context provided. Avoid repetition.
-    If the context does not contain enough information, say "I don't have enough information to answer."
+    You are a Company Knowledge Base Assistant.
+    Your role is to provide accurate and concise answers based on the provided company knowledge base.
+    Use only the context given to answer the question. Avoid assumptions and repetition.
+    If the context does not contain enough information, respond with "I don't have enough information to answer."
     {context}
     Question: {question}
     Answer:
