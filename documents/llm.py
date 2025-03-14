@@ -1,13 +1,23 @@
-from langchain_core.documents import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
+from langchain.prompts import PromptTemplate
+from langchain_chroma import Chroma
+import google.generativeai as genai
+
 from django.apps import apps
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 document_chroma = "./document_chroma"
 hagging_face_embeddings = "BAAI/bge-small-en-v1.5"
 recreate_vector_store = False
+
+genai.configure(api_key=GOOGLE_API_KEY)
 
 
 def get_vector_store():
@@ -32,7 +42,7 @@ def create_knowledge_base():
     create a new vector store from all existing documents
     """
     print("Initializing vector store from existing documents...")
-
+    Document = apps.get_model('documents', 'Document')
     documents = Document.objects.all()
     all_texts = []
 
@@ -93,3 +103,76 @@ def add_document_to_vector_store(document):
             documents_config.vector_store.add_documents(documents=split_docs)
             documents_config.vector_store.persist()
             print(f"{document.title} added to vector store.")
+
+
+# prompt template
+template = """
+    You are Glitex Solutions' AI assistant.
+    Answer the question using the context provided. Avoid repetition.
+    If the context does not contain enough information, say "I don't have enough information to answer."
+    {context}
+    Question: {question}
+    Answer:
+"""
+
+prompt = PromptTemplate(
+    input_variables=["context", "question"],
+    template=template
+)
+
+
+def get_retriever():
+    """
+    get the retriever from the app's vector store.
+    """
+    documents_config = apps.get_app_config('documents')
+    if documents_config.vector_store is None:
+        raise Exception("Vector store not initialized or Emppty. Check documents/apps.py")
+    
+    return documents_config.vector_store.as_retriever(
+        search_type="mmr",
+        search_kwargs={
+            "k": 3,
+            "filter": {"priority": True}
+        }
+    )
+
+
+async def gemini_stream_call(prompt):
+    """
+    streams response from Google Gemini API.
+    """
+    model = genai.GenerativeModel()
+
+    print(f"GEMINI {model.__class__.__name__}")
+
+    response = model.generate_content(prompt, stream=True)
+
+    for chunk in response:
+        yield chunk.text
+
+
+async def stream_answer(inputs):
+    """
+    retrieve context, format prompt, and stream response from Google Gemini.
+    """
+    question = inputs["question"]
+    retriever = get_retriever()
+    context_docs = retriever.invoke(question)
+
+    print(question)
+
+    formatted_context = "\n".join([doc.page_content for doc in context_docs])
+    references = []
+
+    for i, doc in enumerate(context_docs):
+        references.append(f"[{i+1}] Source: {doc.metadata.get('source', 'Unknown')}")
+
+    references_text = "\n".join(references)
+
+    formatted_prompt = prompt.format(context=formatted_context, question=question)
+    
+    async for value in gemini_stream_call(formatted_prompt):
+        yield value
+
+    yield f"\nReferences:\n{references_text}"

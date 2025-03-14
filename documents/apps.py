@@ -9,5 +9,5 @@ class DocumentsConfig(AppConfig):
     def ready(self):
         if not self.vector_store:
             self.vector_store = get_vector_store()
-            # if self.vector_store:
-            #     print(f"{self.name} vector store initialized...")
+            if self.vector_store:
+                print(f"{self.name} vector store initialized...")

@@ -1,14 +1,26 @@
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_chroma import Chroma
+from django.core.exceptions import ValidationError
+from PyPDF2 import PdfReader
+from docx import Document as DocxDocument
 
 from django.apps import apps
 from django.db import models
+import os
+
+from .llm import create_knowledge_base, add_document_to_vector_store
+
+def validate_document_type(value):
+    """Ensure only PDF or DOCX files are uploaded."""
+    ext = os.path.splitext(value.name)[1].lower()
+    if ext not in ['.pdf', '.docx']:
+        raise ValidationError("Only PDF and DOCX files are allowed.")
 
 
 class Document(models.Model):
     title = models.CharField(max_length=252)
-    file = models.FileField(upload_to="documents/")
+    file = models.FileField(
+        upload_to="documents/",
+        validators=[validate_document_type]
+    )
     priority = models.BooleanField(default=False)
     creation_time = models.DateTimeField(auto_now_add=True)
     last_updated_time = models.DateTimeField(auto_now=True)
@@ -19,15 +31,40 @@ class Document(models.Model):
     def __str__(self):
         return self.title
     
+    
+    def save(self, *args, **kwargs):
+        """
+        on save, add to vector store or initialize it
+        """
+        super().save(*args, **kwargs) 
+
+        # get vector store create if empty else add doc
+        documents_config = apps.get_app_config('documents')
+        if documents_config.vector_store is None:
+            documents_config.vector_store = create_knowledge_base()
+            print("New vector store created from all documents...")
+
+        else:
+            print(f"Adding {self.title} to vector store...")
+            add_document_to_vector_store(self)
+
+
     def extract_text(self):
         """
         extract text from the document based on file type
         """
-        return
-    
-    def add_to_vector_store(self):
-        """
-        process the document and add it to the vector store
-        """
-        return
+        ext = os.path.splitext(self.file.name)[1].lower()
+        text = ""
+
+        if ext == ".pdf":
+            reader = PdfReader(self.file)
+            for page in reader.pages:
+                text += page.extract_text() or ""
+
+        elif ext == ".docx":
+            doc = DocxDocument(self.file)
+            for para in doc.paragraphs:
+                text += para.text + "\n"
+
+        return text.strip()
     

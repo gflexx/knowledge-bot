@@ -9,4 +9,5 @@ class ChatsConfig(AppConfig):
     def ready(self):
         if not self.vector_store: 
             # self.vector_store = get_vector_store()
-            print("Vector store initialized...\n")
+            # print("Vector store initialized...\n")
+            pass
