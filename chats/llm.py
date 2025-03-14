@@ -142,7 +142,7 @@ def format_prompt(inputs):
     formatted_context = "\n".join([doc.page_content for doc in context_docs])
 
     sources = [doc.metadata.get("source", "Unknown source") for doc in context_docs]
-
+    
     return {
         "prompt": prompt.format(context=formatted_context, question=question),
         "sources": sources
@@ -174,12 +174,16 @@ async def stream_answer(inputs):
     print(question)
 
     formatted_context = "\n".join([doc.page_content for doc in context_docs])
-    sources = [doc.metadata.get("source", "Unknown source") for doc in context_docs]
+    references = []
+
+    for i, doc in enumerate(context_docs):
+        references.append(f"[{i+1}] Source: {doc.metadata.get('source', 'Unknown')}")
+
+    references_text = "\n".join(references)
 
     formatted_prompt = prompt.format(context=formatted_context, question=question)
     
     async for value in gemini_stream_call(formatted_prompt):
-        yield {
-            "response": value,
-            "sources": sources
-        }
+        yield value
+
+    yield f"\nReferences:\n{references_text}"

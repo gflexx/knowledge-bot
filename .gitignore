@@ -7,3 +7,6 @@ __pycache__/
 data/
 *.log
 chroma_db/
+document_chroma/
+static/
+media/

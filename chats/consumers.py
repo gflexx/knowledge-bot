@@ -20,7 +20,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 async for token in stream_answer(
                     {"question": question}
                     ):
-                    await self.send(text_data=json.dumps({"message": token}))
+                    await self.send(
+                        text_data=json.dumps(
+                            {"message": token}
+                        )
+                    )
                     await asyncio.sleep(0.01) 
 
             except Exception as e:
