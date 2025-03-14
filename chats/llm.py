@@ -177,7 +177,6 @@ async def stream_answer(inputs):
 
     formatted_context = "\n".join([doc.page_content for doc in context_docs])
 
-    print(formatted_context)
     references = []
     seen_references = set()
 
@@ -189,14 +188,14 @@ async def stream_answer(inputs):
         if reference not in seen_references:
             seen_references.add(reference)
             references.append(f"[{len(references) + 1}] {reference}")
-            
+
     references_text = "\n".join(references)
 
-    yield f"{references_text}"
+    # yield f"{references_text}"
 
-    # formatted_prompt = prompt.format(context=formatted_context, question=question)
+    formatted_prompt = prompt.format(context=formatted_context, question=question)
     
-    # async for value in gemini_stream_call(formatted_prompt):
-    #     yield value
+    async for value in gemini_stream_call(formatted_prompt):
+        yield value
 
-    # yield f"\nReferences:\n{references_text}"
+    yield f"\nReferences:\n{references_text}"
