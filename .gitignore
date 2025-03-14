@@ -1,2 +1,9 @@
 .env
 env/
+scraped_content/
+__pycache__/
+*.py[cod]
+*.sqlite3
+data/
+*.log
+chroma_db/
