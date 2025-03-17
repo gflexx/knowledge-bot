@@ -8,6 +8,7 @@ API = 'api/v0'
 urlpatterns = [
     path('duisbxtya/admin/', admin.site.urls),
     path(f'{API}/chats/', include('chats.urls')),
+    path(f'{API}/documents/', include('documents.urls')),
 ]
 
 urlpatterns = urlpatterns + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

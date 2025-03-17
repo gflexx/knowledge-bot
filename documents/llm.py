@@ -142,7 +142,7 @@ def get_retriever():
     return vector_store.as_retriever(
         search_type="mmr",
         search_kwargs={
-            "k": 5,
+            "k": 3,
             "lambda_mult": 0.5,
             # "filter": {"priority": True}
         },
@@ -175,6 +175,8 @@ async def stream_answer(inputs):
     print(f"Question: {question}")
 
     formatted_context = "\n".join([doc.page_content for doc in context_docs])
+
+    print(formatted_context)
 
     references = []
 
