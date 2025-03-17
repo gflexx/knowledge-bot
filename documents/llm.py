@@ -176,12 +176,17 @@ async def stream_answer(inputs):
 
     formatted_context = "\n".join([doc.page_content for doc in context_docs])
 
-    print(formatted_context)
-
     references = []
+    seen_references = set()
 
     for i, doc in enumerate(context_docs):
-        references.append(f"[{i+1}] Source: {doc.metadata.get('source', 'Unknown')}")
+        source = doc.metadata.get('title', 'Unknown')
+        page = doc.metadata.get('page', 'N/A')
+        reference = f"Source: {source}, Page: {page}"
+
+        if reference not in seen_references:
+            seen_references.add(reference)
+            references.append(f"[{len(references) + 1}] {reference}")
 
     references_text = "\n".join(references)
 
@@ -189,6 +194,8 @@ async def stream_answer(inputs):
     
     async for value in gemini_stream_call(formatted_prompt):
         yield value
+
+    print(references_text)
 
     if references_text:
         yield f"\nReferences:\n{references_text}"

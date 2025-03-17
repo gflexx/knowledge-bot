@@ -13,7 +13,21 @@ DEBUG = os.getenv('DJANGO_DEBUG')
 
 ON_PRODUCTION = os.getenv('DJANGO_ON_PRODUCTION', default=False)
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost', 'api.glitexsolutions.co.ke', '109.199.105.14']
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost', 'glitexsolutions.co.ke', ]
+
+CORS_ORIGIN_WHITELIST = env.list('DJANGO_CORS_ORIGIN_WHITELIST', default=[
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'http://localhost:8000',
+    "https://glitexsolutions.co.ke",
+])
+
+CORS_ALLOWED_ORIGINS = env.list('DJANGO_CORS_ALLOWED_ORIGINS', default=[
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'http://localhost:8000',
+    "https://glitexsolutions.co.ke",
+])
 
 INSTALLED_APPS = [
     'daphne',
@@ -25,12 +39,14 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 
     'channels',
-    
+    'corsheaders',
+
     'documents',
     'chats',
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
