@@ -109,7 +109,6 @@ def add_document_to_vector_store(document):
             )
 
             documents_config.vector_store.add_documents(documents=split_docs)
-            documents_config.vector_store.persist()
             print(f"{document.title} added to vector store.")
 
 

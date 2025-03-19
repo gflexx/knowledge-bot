@@ -1,3 +1,4 @@
+from rest_framework.generics import ListCreateAPIView
 import json
 from django.http import StreamingHttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -5,6 +6,7 @@ from django.utils.decorators import sync_and_async_middleware
 import asyncio
 
 from .llm import stream_answer
+from .serializers import *
 
 
 @csrf_exempt
@@ -44,3 +46,10 @@ async def answer_question(request):
 
     return StreamingHttpResponse(token_generator(), content_type='text/plain')
     
+
+class DocumentListCreateAPiView(ListCreateAPIView):
+    """
+    lists and creates documents
+    """
+    serializer_class = DocumentSerializer
+    queryset = Document.objects.all()
