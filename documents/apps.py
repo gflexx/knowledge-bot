@@ -1,14 +1,12 @@
 from django.apps import AppConfig
-from .llm import get_vector_store
+from .llm import create_knowledge_base
 
 class DocumentsConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'documents'
-    vector_store = None
+    vector_stores = {}
 
     def ready(self):
-        if not self.vector_store:
-            self.vector_store = get_vector_store()
-            if self.vector_store:
-                print(f"Document length: {self.vector_store._collection.count()} ...")
-                print(f"Documents vector store initialized...")
+        if not self.vector_stores:
+            self.vector_stores = create_knowledge_base()
+            print(f"Vector stores loaded into memory: {len(self.vector_stores)} documents...")

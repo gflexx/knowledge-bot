@@ -40,8 +40,8 @@ class Document(models.Model):
 
         # get vector store create if empty else add doc
         documents_config = apps.get_app_config('documents')
-        if documents_config.vector_store is None:
-            documents_config.vector_store = create_knowledge_base()
+        if documents_config.vector_stores is None:
+            documents_config.vector_stores = create_knowledge_base()
             print("New vector store created from documents...")
 
         else:
