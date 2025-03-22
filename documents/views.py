@@ -1,4 +1,4 @@
-from rest_framework.generics import ListCreateAPIView
+from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
 import json
 from django.http import StreamingHttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -53,3 +53,12 @@ class DocumentListCreateAPiView(ListCreateAPIView):
     """
     serializer_class = DocumentSerializer
     queryset = Document.objects.all()
+
+
+class DocumentUpdateDelete(RetrieveUpdateDestroyAPIView):
+    """
+    updates deletes documents
+    """
+    serializer_class = DocumentSerializer
+    queryset = Document.objects.all()
+    lookup_field = 'id'

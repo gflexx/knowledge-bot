@@ -3,6 +3,9 @@ from .views import *
 
 urlpatterns = [
     path('answer/', answer_question, name='answer_question'),
+
     path('list/create/', DocumentListCreateAPiView.as_view()),
+    path('update/destroy/<int:id>/', DocumentUpdateDelete.as_view()),
+
 
 ]

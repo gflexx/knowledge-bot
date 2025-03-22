@@ -185,11 +185,9 @@ async def compute_similarity(doc_id, context_docs, question_embedding):
     )
     similarity_score = util.pytorch_cos_sim(question_embedding, text_embedding).item()
 
-    print(f"Similarity score {similarity_score} -- {doc_id}")
+    # print(f"Similarity score {similarity_score} -- {doc_id}")
     
     if similarity_score >= 0.45:
-        print(doc_id)
-        print('\n')
         return (doc_id, context_docs)
     return None
 
@@ -248,7 +246,7 @@ async def stream_answer(inputs):
             
             # Only add each unique source/page combination once
             if key not in unique_references:
-                unique_references[key] = f"Source: {source}, Page: {page}"
+                unique_references[key] = f"Source: {source}, Page: {page} <hidden={doc_id}>"
 
     if not all_contexts:
         yield "No relevant content found in selected documents."

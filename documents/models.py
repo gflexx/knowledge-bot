@@ -2,11 +2,14 @@ from django.core.exceptions import ValidationError
 from PyPDF2 import PdfReader
 from docx import Document as DocxDocument
 
+from django.db.models.signals import pre_delete
+from django.dispatch import receiver
 from django.apps import apps
 from django.db import models
+import shutil
 import os
 
-from .llm import create_knowledge_base, add_document_to_vector_store
+from .llm import create_knowledge_base, add_document_to_vector_store, get_document_vector_store_dir
 
 def validate_document_type(value):
     """Ensure only PDF or DOCX files are uploaded."""
@@ -113,3 +116,16 @@ class Document(models.Model):
 
         return extracted_pages
     
+@receiver(pre_delete, sender=Document)
+def delete_vector_store(sender, instance, **kwargs):
+    documents_config = apps.get_app_config("documents")
+    vector_stores = documents_config.vector_stores 
+    doc_vector_store_dir = get_document_vector_store_dir(instance.id)
+
+    if os.path.exists(doc_vector_store_dir):
+        shutil.rmtree(doc_vector_store_dir) 
+
+    if instance.id in vector_stores:
+        del vector_stores[instance.id]
+
+    print(f"Deleted vector store for document {instance.id}: {instance.title}")
