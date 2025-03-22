@@ -5,6 +5,7 @@ from langchain_core.documents import Document
 from langchain_chroma import Chroma
 import google.generativeai as genai
 from sentence_transformers import SentenceTransformer, util
+import torch
 
 from asgiref.sync import sync_to_async
 import asyncio
@@ -23,6 +24,19 @@ document_chroma = "./document_chroma"
 hagging_face_embeddings = "sentence-transformers/all-mpnet-base-v2"
 recreate_vector_store = False
 
+print("Loading Models...")
+
+# init models
+hf_embeddings = HuggingFaceEmbeddings(
+    model_name=hagging_face_embeddings,
+    model_kwargs={'device': 'cpu'}
+)
+
+transformers_model = SentenceTransformer(
+    "sentence-transformers/all-mpnet-base-v2", 
+    device="cpu"
+)
+
 genai.configure(api_key=GOOGLE_API_KEY)
 
 
@@ -32,18 +46,15 @@ def get_document_vector_store_dir(document_id):
 
 def get_vector_store(document_id):
     """
-    Load a document's vector store from disk into memory.
+    load a document's vector store from disk into memory.
     """
     doc_vector_store_dir = get_document_vector_store_dir(document_id)
     if os.path.exists(doc_vector_store_dir) and os.listdir(doc_vector_store_dir):
         print(f"Loading vector store for document {document_id}...")
-        embeddings = HuggingFaceEmbeddings(
-            model_name=hagging_face_embeddings,
-            # model_kwargs={"use_auth_token": HF_API_KEY}
-        )
+
         return Chroma(
             persist_directory=doc_vector_store_dir, 
-            embedding_function=embeddings
+            embedding_function=hf_embeddings
         )
     
     print(f"No vector store found for document {document_id}, initializing empty store...")
@@ -67,7 +78,7 @@ def create_knowledge_base():
 
 def add_document_to_vector_store(document):
     """
-    Create a separate vector store for a single document.
+    create a separate vector store for a single document.
     """
     documents_config = apps.get_app_config("documents")
     vector_stores = documents_config.vector_stores 
@@ -93,10 +104,9 @@ def add_document_to_vector_store(document):
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=250)
     split_docs = text_splitter.split_documents(all_texts)
 
-    embeddings = HuggingFaceEmbeddings(model_name=hagging_face_embeddings)
     vector_store = Chroma.from_documents(
         documents=split_docs,
-        embedding=embeddings,
+        embedding=hf_embeddings,
         persist_directory=doc_vector_store_dir
     )
 
@@ -157,6 +167,33 @@ def extract_and_join_page_contents(documents, separator="\n"):
     return joined_text
 
 
+async def compute_similarity(doc_id, context_docs, question_embedding):
+    """
+    filter out unwanted ctx docs by comparing transformer similarity
+    """
+    if not context_docs:
+        return None
+    
+    doc_text = extract_and_join_page_contents(context_docs)
+
+    #Use run_in_executor to run CPU-intensive encoding in a thread pool
+    text_embedding = await asyncio.to_thread(
+        transformers_model.encode, 
+        doc_text, 
+        convert_to_tensor=True, 
+        normalize_embeddings=True
+    )
+    similarity_score = util.pytorch_cos_sim(question_embedding, text_embedding).item()
+
+    print(f"Similarity score {similarity_score} -- {doc_id}")
+    
+    if similarity_score >= 0.45:
+        print(doc_id)
+        print('\n')
+        return (doc_id, context_docs)
+    return None
+
+
 async def stream_answer(inputs):
     """
     retrieve context, format prompt, and stream response from Google Gemini.
@@ -179,46 +216,55 @@ async def stream_answer(inputs):
     results = await asyncio.gather(*tasks)
 
     # load question to transformers
-    model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2", device="cpu")
-    question_embedding = model.encode(question, convert_to_tensor=True, normalize_embeddings=True)
+    question_embedding = transformers_model.encode(question, convert_to_tensor=True, normalize_embeddings=True)
 
-    # filter out unwanted cxt docs by comparing transformer similarity
-    for doc_id, context_docs in results:
-        if context_docs:
-            doc_text = extract_and_join_page_contents(context_docs)
-            text_embedding = model.encode(doc_text, convert_to_tensor=True, normalize_embeddings=True)
-            similarity_score = util.pytorch_cos_sim(question_embedding, text_embedding).item()
+    similarity_tasks = [
+        compute_similarity(
+            doc_id, context_docs, question_embedding
+        ) 
+            for doc_id, context_docs in results
+        ]
 
-            if similarity_score > 0.6: 
-                print(doc_text)
-                print('\n') 
-                relevant_docs.append((doc_id, context_docs))
+    # run all similarity computations concurrently
+    similarity_results = await asyncio.gather(*similarity_tasks)
+
+    # filter out None results
+    relevant_docs = [result for result in similarity_results if result is not None]
 
     if not relevant_docs:
         yield "No relevant documents found."
         return
 
     all_contexts = []
-    all_references = []
-
-    print(relevant_docs)
+    unique_references = {} 
 
     for doc_id, context_docs in relevant_docs:
-        for i, doc in enumerate(context_docs):
+        for doc in context_docs:
             all_contexts.append(doc.page_content)
-            all_references.append(f"[{len(all_references) + 1}] Source: {doc.metadata.get('title', 'Unknown')}, Page: {doc.metadata.get('page', 'N/A')}")
+            
+            source = doc.metadata.get('title', 'Unknown')
+            page = doc.metadata.get('page', 'N/A')
+            key = f"{source}_{page}"
+            
+            # Only add each unique source/page combination once
+            if key not in unique_references:
+                unique_references[key] = f"Source: {source}, Page: {page}"
 
     if not all_contexts:
         yield "No relevant content found in selected documents."
         return
 
     formatted_context = "\n".join(all_contexts)
-    references_text = "\n".join(sorted(set(all_references))) 
+    all_references = []
+    for i, ref_text in enumerate(sorted(unique_references.values())):
+        all_references.append(f"[{i+1}] {ref_text}")
+
+    references_text = "\n".join(all_references)
 
     formatted_prompt = prompt.format(context=formatted_context, question=question)
 
-    async for value in gemini_stream_call(formatted_prompt):
-        yield value
+    # async for value in gemini_stream_call(formatted_prompt):
+    #     yield value
 
     if references_text:
         yield f"\nReferences:\n{references_text}"

@@ -128,3 +128,6 @@ STATICFILES_DIRS = [
 ]
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# pytorch cude
+os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
