@@ -3,10 +3,14 @@ import json
 from django.http import StreamingHttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import sync_and_async_middleware
+from asgiref.sync import sync_to_async
 import asyncio
+
 
 from .llm import stream_answer
 from .serializers import *
+
+from conversations.models import Conversation, Message
 
 
 @csrf_exempt
@@ -35,6 +39,23 @@ async def answer_question(request):
             {"error": "Invalid JSON format"}, 
             status=400
         )
+    
+    # Retrieve or create conversation
+    session = request.session
+    conversation_id = session.get("conversation_id")
+
+    if conversation_id:
+        try:
+            conversation = await sync_to_async(Conversation.objects.get)(id=conversation_id)
+        except Conversation.DoesNotExist:
+            conversation = await sync_to_async(Conversation.objects.create)()
+            session["conversation_id"] = str(conversation.id)
+            session.modified = True
+            
+    else:
+        conversation = await sync_to_async(Conversation.objects.create)()
+        session["conversation_id"] = str(conversation.id)
+        session.modified = True
     
     async def token_generator():
         try:
