@@ -4,7 +4,7 @@ import uuid
 
 
 class ConversationManager(models.Manager):
-    def check_conversation(request):
+    def check_conversation(self, request):
         if 'conversation_id' in request.COOKIES:
             conversation_id = Conversation.objects.filter(
                 id=conversation_id
@@ -58,6 +58,8 @@ class Message(models.Model):
     )
     content = models.TextField()
     timestamp = models.DateTimeField(default=now)
+
+    objects = ConversationManager()
 
     def __str__(self):
         return f"{self.sender.capitalize()} ({self.timestamp})"
