@@ -9,7 +9,13 @@ class ConversationSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-class MessageSerializer(serializers.ModelSerializer):
+class BaseMassegeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Message
+        fields = "__all__"
+
+
+class MessageSerializer(BaseMassegeSerializer):
     class Meta:
         model = Message
         fields = "__all__"
