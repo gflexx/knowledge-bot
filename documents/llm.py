@@ -101,7 +101,12 @@ def add_document_to_vector_store(document):
             )
         )
 
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=250)
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000, 
+        chunk_overlap=250,
+        separators=["\n\n", "\n", " ", ""], 
+        keep_separator=False
+    )
     split_docs = text_splitter.split_documents(all_texts)
 
     vector_store = Chroma.from_documents(
@@ -120,7 +125,8 @@ template = """
     You are a Company Knowledge Base Assistant.
     Your role is to provide accurate and concise answers based on the provided company knowledge base.
     Use only the context given to answer the question. Avoid assumptions and repetition.
-    If the context does not contain enough information, respond with "I don't have enough information to answer."
+    If the context lacks direct details, provide a general response based on similar cases within the platform.
+    otherwise respond with "I don't have enough information to answer."
     {context}
     Question: {question}
     Answer:
@@ -157,11 +163,12 @@ async def gemini_stream_call(prompt):
         yield chunk.text
 
 
-def extract_and_join_page_contents(documents, separator="\n"):
+def extract_and_join_page_contents(documents, separator=" "):
     page_contents = []
     for document in documents:
         if hasattr(document, 'page_content') and document.page_content:
-            page_contents.append(document.page_content)
+            cleaned_text = document.page_content.replace("\n", " ")  # Remove all newlines
+            page_contents.append(cleaned_text)
 
     joined_text = separator.join(page_contents)
     return joined_text
@@ -185,9 +192,9 @@ async def compute_similarity(doc_id, context_docs, question_embedding):
     )
     similarity_score = util.pytorch_cos_sim(question_embedding, text_embedding).item()
 
-    # print(f"Similarity score {similarity_score} -- {doc_id}")
+    print(f"Similarity score {similarity_score} -- {doc_id}")
     
-    if similarity_score >= 0.45:
+    if similarity_score >= 0.3:
         return (doc_id, context_docs)
     return None
 
@@ -239,6 +246,7 @@ async def stream_answer(inputs):
     for doc_id, context_docs in relevant_docs:
         for doc in context_docs:
             all_contexts.append(doc.page_content)
+            # print(relevant_docs)
             
             source = doc.metadata.get('title', 'Unknown')
             page = doc.metadata.get('page', 'N/A')
@@ -252,14 +260,16 @@ async def stream_answer(inputs):
         yield "No relevant content found in selected documents."
         return
 
-    formatted_context = "\n".join(all_contexts)
+    formatted_context = " ".join(" ".join(all_contexts).split())
     all_references = []
-    for i, ref_text in enumerate(sorted(unique_references.values())):
+    for i, ref_text in enumerate(unique_references.values()):
         all_references.append(f"[{i+1}] {ref_text}")
 
     references_text = "\n".join(all_references)
 
     formatted_prompt = prompt.format(context=formatted_context, question=question)
+
+    print(formatted_prompt)
 
     # async for value in gemini_stream_call(formatted_prompt):
     #     yield value

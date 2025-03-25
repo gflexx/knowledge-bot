@@ -43,6 +43,7 @@ async def answer_question(request):
     # Retrieve or create conversation
     session = request.session
     conversation_id = session.get("conversation_id")
+    print(conversation_id)
 
     if conversation_id:
         try:

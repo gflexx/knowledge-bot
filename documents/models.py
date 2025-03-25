@@ -77,7 +77,7 @@ class Document(models.Model):
 
             for para in doc.paragraphs:
                 if para.text.strip():
-                    page_text += para.text + "\n"
+                    page_text += para.text + " "
                     char_count += len(para.text)
 
                 # check for manual page breaks
