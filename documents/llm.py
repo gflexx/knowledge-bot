@@ -6,6 +6,7 @@ from langchain_chroma import Chroma
 import google.generativeai as genai
 from sentence_transformers import SentenceTransformer, util
 import torch
+from huggingface_hub import login
 
 from asgiref.sync import sync_to_async
 import asyncio
@@ -21,20 +22,23 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 HF_API_KEY = os.getenv("HF_API_KEY")
 
 document_chroma = "./document_chroma"
-hagging_face_embeddings = "sentence-transformers/all-mpnet-base-v2"
+hagging_face_embeddings = "BAAI/bge-base-en-v1.5"
 recreate_vector_store = False
 
 print("Loading Models...")
 
+# print("Logging in to Hugging Face...")
+# login(token=HF_API_KEY)
+
 # init models
 hf_embeddings = HuggingFaceEmbeddings(
     model_name=hagging_face_embeddings,
-    model_kwargs={'device': 'cpu'}
+    model_kwargs={'device': 'cpu'},
 )
 
 transformers_model = SentenceTransformer(
-    "sentence-transformers/all-mpnet-base-v2", 
-    device="cpu"
+    hagging_face_embeddings, 
+    device="cpu",
 )
 
 genai.configure(api_key=GOOGLE_API_KEY)
@@ -123,11 +127,17 @@ def add_document_to_vector_store(document):
 # prompt template
 template = """
     You are a Company Knowledge Base Assistant.
-    Your role is to provide accurate and concise answers based on the provided company knowledge base.
-    Use only the context given to answer the question. Avoid assumptions and repetition.
-    If the context lacks direct details, provide a general response based on similar cases within the platform.
-    otherwise respond with "I don't have enough information to answer."
-    {context}
+    Your role is to provide accurate and concise answers based only on the provided company knowledge base.
+
+    Answer the user's question truthfully and clearly using the information available in the context below.
+    If the information is incomplete or missing, do the following:
+    - If you can infer an answer based on the company's services and purpose, provide a helpful general response.
+    - If no reasonable information is found in the context, reply: "I don't have enough information to answer."
+
+    Avoid making assumptions, repeating the question, or providing external information.
+    Use clear and simple language.
+
+    Context: {context}
     Question: {question}
     Answer:
 """
@@ -144,8 +154,8 @@ def get_retriever(document_id, vector_stores):
         raise Exception(f"Vector store not found for document {document_id}")
     
     return vector_store.as_retriever(
-        search_type="mmr",
-        search_kwargs={"k": 3, "lambda_mult": 0.7}
+        search_type="similarity_score_threshold",
+        search_kwargs={"score_threshold": 0.55, "k": 5}
     )
 
 
@@ -254,7 +264,11 @@ async def stream_answer(inputs):
             
             # Only add each unique source/page combination once
             if key not in unique_references:
-                unique_references[key] = f"Source: {source}, Page: {page} <hidden={doc_id}>"
+                unique_references[key] = {
+                    "source": source,
+                    "page": int(page) if str(page).isdigit() else 0, 
+                    "doc_id": doc_id
+                }
 
     if not all_contexts:
         yield "No relevant content found in selected documents."
@@ -262,7 +276,12 @@ async def stream_answer(inputs):
 
     formatted_context = " ".join(" ".join(all_contexts).split())
     all_references = []
-    for i, ref_text in enumerate(unique_references.values()):
+    sorted_references = sorted(
+        unique_references.values(),
+        key=lambda x: (x["source"], int(x["page"]))  
+    )
+    for i, ref_text in enumerate(sorted_references):
+        ref_text = f"Source: {ref_text['source']}, Page: {ref_text['page']} <hidden={ref_text['doc_id']}>"
         all_references.append(f"[{i+1}] {ref_text}")
 
     references_text = "\n".join(all_references)
@@ -271,8 +290,8 @@ async def stream_answer(inputs):
 
     print(formatted_prompt)
 
-    # async for value in gemini_stream_call(formatted_prompt):
-    #     yield value
+    async for value in gemini_stream_call(formatted_prompt):
+        yield value
 
     if references_text:
         yield f"\nReferences:\n{references_text}"

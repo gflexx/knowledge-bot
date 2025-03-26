@@ -64,6 +64,7 @@ class Document(models.Model):
             for page_num, page in enumerate(reader.pages, start=1):
                 page_text = page.extract_text() or ""
                 if page_text.strip():
+                    page_text += f" {self.title}"
                     extracted_pages.append(
                         {"text": page_text, "page": page_num}
                     )
