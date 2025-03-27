@@ -5,8 +5,10 @@ from langchain_core.documents import Document
 from langchain_chroma import Chroma
 import google.generativeai as genai
 from sentence_transformers import SentenceTransformer, util
+from rapidfuzz import process, fuzz
 import torch
 from huggingface_hub import login
+from transformers import pipeline
 
 from asgiref.sync import sync_to_async
 import asyncio
@@ -39,6 +41,12 @@ hf_embeddings = HuggingFaceEmbeddings(
 transformers_model = SentenceTransformer(
     hagging_face_embeddings, 
     device="cpu",
+)
+
+ner_pipeline = pipeline(
+    "ner", 
+    model="dslim/bert-base-NER", 
+    aggregation_strategy="simple"
 )
 
 genai.configure(api_key=GOOGLE_API_KEY)
@@ -148,15 +156,121 @@ prompt = PromptTemplate(
 )
 
 
+async def detect_source_from_question(question):
+    DocumentModel = apps.get_model('documents', 'Document')
+    sources = await sync_to_async(list)(DocumentModel.objects.values_list('title', flat=True))
+
+    ner_results = ner_pipeline(question)
+    entities = []
+    current_entity = []
+
+    # Merge consecutive entities
+    for result in ner_results:
+        if result["entity_group"] in ["ORG", "MISC", "PRODUCT", "WORK_OF_ART"]:
+            word = result["word"].replace("##", "")
+            current_entity.append(word)
+        else:
+            if current_entity:
+                entities.append(" ".join(current_entity).strip())
+                current_entity = []
+
+    if current_entity:
+        entities.append(" ".join(current_entity).strip())
+
+    print(f"NER Entities: {entities}")
+
+    # Fuzzy Match each entity to sources
+    for entity in entities:
+        match, score, _ = process.extractOne(
+            entity,
+            sources,
+            scorer=fuzz.partial_ratio  # You can try ratio, token_set_ratio, etc.
+        )
+        print(f"Trying match: '{entity}' -> '{match}' (Score: {score})")
+        if score >= 50:  # You can tweak this threshold
+            return match
+
+    return None
+
+
+
 def get_retriever(document_id, vector_stores):
     vector_store = vector_stores.get(document_id)
     if vector_store is None:
         raise Exception(f"Vector store not found for document {document_id}")
     
+    
     return vector_store.as_retriever(
         search_type="similarity_score_threshold",
-        search_kwargs={"score_threshold": 0.55, "k": 5}
+        search_kwargs={
+            "score_threshold": 0.5, "k": 3
+        }
     )
+
+
+async def get_hybrid_retriever(question, document_id, vector_stores):
+    """
+    Combines semantic and keyword retrievers, deduplicates, and re-ranks results.
+    """
+    vector_store = vector_stores.get(document_id)
+    if vector_store is None:
+        raise Exception(f"Vector store not found for document {document_id}")
+
+    # Semantic search retriever
+    semantic_retriever = vector_store.as_retriever(
+        search_type="similarity_score_threshold",
+        search_kwargs={"score_threshold": 0.5, "k": 3}
+    )
+
+    keyword_retriever = vector_store.as_retriever(
+        search_type="mmr", 
+        search_kwargs={"k": 3, "fetch_k": 10}
+    )
+
+    semantic_results, keyword_results = await asyncio.gather(
+        sync_to_async(semantic_retriever.invoke)(question),
+        sync_to_async(keyword_retriever.invoke)(question)
+    )
+
+    combined = {doc.page_content: doc for doc in semantic_results + keyword_results}
+    combined_results = list(combined.values())
+
+    reranked_docs = await re_rank_results(question, combined_results)
+
+    return reranked_docs
+
+
+async def re_rank_results(question, documents):
+    """
+    Re-rank documents based on cosine similarity to the question.
+    """
+    if not documents:
+        return []
+
+    question_embedding = await asyncio.to_thread(
+        transformers_model.encode,
+        question,
+        convert_to_tensor=True,
+        normalize_embeddings=True
+    )
+
+    scored_docs = []
+    for doc in documents:
+        doc_embedding = await asyncio.to_thread(
+            transformers_model.encode,
+            doc.page_content,
+            convert_to_tensor=True,
+            normalize_embeddings=True
+        )
+        score = util.pytorch_cos_sim(question_embedding, doc_embedding).item()
+        scored_docs.append((doc, score))
+
+    reranked = sorted(scored_docs, key=lambda x: x[1], reverse=True)
+
+    for doc, score in reranked:
+        print(f"Score: {score:.2f} | Source: {doc.metadata.get('title', 'Unknown')}")
+
+    return [doc for doc, score in reranked]
 
 
 async def gemini_stream_call(prompt):
@@ -217,15 +331,21 @@ async def stream_answer(inputs):
     vector_stores = documents_config.vector_stores 
 
     question = inputs["question"]
-    
+
+    source_title = await detect_source_from_question(question)
+    print(f"Detected Source: {source_title}")
+
     DocumentModel = apps.get_model('documents', 'Document')
 
-    all_documents = await sync_to_async(list)(DocumentModel.objects.all())
+    if source_title:
+        all_documents = await sync_to_async(list)(DocumentModel.objects.filter(title=source_title))
+    else:
+        all_documents = await sync_to_async(list)(DocumentModel.objects.all())
 
     relevant_docs = []
     async def fetch_context(doc):
-        retriever = get_retriever(doc.id, vector_stores)
-        return doc.id, await sync_to_async(retriever.invoke)(question) 
+        context_docs = await get_hybrid_retriever(question, doc.id, vector_stores)
+        return doc.id, context_docs
 
     tasks = [fetch_context(doc) for doc in all_documents]
     results = await asyncio.gather(*tasks)
@@ -288,10 +408,10 @@ async def stream_answer(inputs):
 
     formatted_prompt = prompt.format(context=formatted_context, question=question)
 
-    print(formatted_prompt)
+    print(formatted_context)
 
-    async for value in gemini_stream_call(formatted_prompt):
-        yield value
+    # async for value in gemini_stream_call(formatted_prompt):
+    #     yield value
 
     if references_text:
         yield f"\nReferences:\n{references_text}"

@@ -79,6 +79,7 @@ class Document(models.Model):
             for para in doc.paragraphs:
                 if para.text.strip():
                     page_text += para.text + " "
+                    page_text += f" {self.title}"
                     char_count += len(para.text)
 
                 # check for manual page breaks
@@ -96,6 +97,7 @@ class Document(models.Model):
 
                 # approximate page breaks based on character count
                 elif char_count >= chars_per_page:
+                    page_text += f" {self.title}"
                     extracted_pages.append(
                         {
                             "text": page_text.strip(), 
@@ -108,6 +110,7 @@ class Document(models.Model):
 
                 # Add last collected page text
                 if page_text.strip():
+                    page_text += f" {self.title}"
                     extracted_pages.append(
                         {
                             "text": page_text.strip(), 
