@@ -135,14 +135,14 @@ def add_document_to_vector_store(document):
 # prompt template
 template = """
     You are a Company Knowledge Base Assistant.
-    Your role is to provide accurate and concise answers based only on the provided company knowledge base.
+    Your role is to provide accurate and concise answers based on the provided company knowledge base.
 
     Answer the user's question truthfully and clearly using the information available in the context below.
     If the information is incomplete or missing, do the following:
     - If you can infer an answer based on the company's services and purpose, provide a helpful general response.
+    - Infer when you have similar data
     - If no reasonable information is found in the context, reply: "I don't have enough information to answer."
 
-    Avoid making assumptions, repeating the question, or providing external information.
     Use clear and simple language.
 
     Context: {context}
@@ -203,7 +203,7 @@ def get_retriever(document_id, vector_stores):
     return vector_store.as_retriever(
         search_type="similarity_score_threshold",
         search_kwargs={
-            "score_threshold": 0.5, "k": 3
+            "score_threshold": 0.499, "k": 3
         }
     )
 
@@ -219,7 +219,9 @@ async def get_hybrid_retriever(question, document_id, vector_stores):
     # Semantic search retriever
     semantic_retriever = vector_store.as_retriever(
         search_type="similarity_score_threshold",
-        search_kwargs={"score_threshold": 0.5, "k": 3}
+        search_kwargs={
+            "score_threshold": 0.51, "k": 3
+        }
     )
 
     keyword_retriever = vector_store.as_retriever(
@@ -344,8 +346,8 @@ async def stream_answer(inputs):
 
     relevant_docs = []
     async def fetch_context(doc):
-        context_docs = await get_hybrid_retriever(question, doc.id, vector_stores)
-        return doc.id, context_docs
+        retriever = get_retriever(doc.id, vector_stores)
+        return doc.id, await sync_to_async(retriever.invoke)(question) 
 
     tasks = [fetch_context(doc) for doc in all_documents]
     results = await asyncio.gather(*tasks)
@@ -401,7 +403,7 @@ async def stream_answer(inputs):
         key=lambda x: (x["source"], int(x["page"]))  
     )
     for i, ref_text in enumerate(sorted_references):
-        ref_text = f"Source: {ref_text['source']}, Page: {ref_text['page']} <hidden={ref_text['doc_id']}>"
+        ref_text = f"Source: {ref_text['source']}, Page: {ref_text['page']} <hidden={ref_text['doc_id']}|page={ref_text['page']}>"
         all_references.append(f"[{i+1}] {ref_text}")
 
     references_text = "\n".join(all_references)
