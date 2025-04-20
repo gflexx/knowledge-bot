@@ -13,20 +13,20 @@ DEBUG = os.getenv('DJANGO_DEBUG')
 
 ON_PRODUCTION = os.getenv('DJANGO_ON_PRODUCTION', default=False)
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost', 'glitexsolutions.co.ke', ]
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost', 'company.co.ke', ]
 
 CORS_ORIGIN_WHITELIST = env.list('DJANGO_CORS_ORIGIN_WHITELIST', default=[
     'http://localhost:3000',
     'http://127.0.0.1:3000',
     'http://localhost:8000',
-    "https://glitexsolutions.co.ke",
+    "https://company.co.ke",
 ])
 
 CORS_ALLOWED_ORIGINS = env.list('DJANGO_CORS_ALLOWED_ORIGINS', default=[
     'http://localhost:3000',
     'http://127.0.0.1:3000',
     'http://localhost:8000',
-    "https://glitexsolutions.co.ke",
+    "https://company.co.ke",
 ])
 
 INSTALLED_APPS = [

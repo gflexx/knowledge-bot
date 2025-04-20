@@ -3,7 +3,12 @@ import asyncio
 import os
 import re
 
-BASE_URL = "https://www.glitexsolutions.co.ke/" 
+
+"""
+make sure you hv ermission to crawl a website
+"""
+
+BASE_URL = "https://www.company.co.ke/" 
 OUTPUT_DIR = "./scraped_content"
 MAX_PAGES = 7
 WAIT_TIME = 2000  
