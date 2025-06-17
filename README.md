@@ -6,7 +6,7 @@ Optimized for compliance and medical use cases (e.g., Kenya's Data Protection Ac
 ---
 
 ## Features
-- GEMENI API with async
+- GEMINI API with async
 - Embeddings via Hugging Face API or local inference
 - Custom document loader and vector store with ChromaDB
 - LangChain-powered retriever + LLM response generation
